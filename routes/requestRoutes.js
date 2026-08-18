@@ -17,6 +17,7 @@ const {
     getWorklist,
     getRequestById,
     uploadRequestImage,
+    uploadRequestOverlay,
     getRequestComments,
     addRequestComment
 } = require("../controllers/requestController");
@@ -65,6 +66,18 @@ router.post(
     authorizeRoles("technician"),
     upload.single("file"),
     uploadRequestImage
+);
+
+/*
+ * Upload an AVM segmentation overlay (NIfTI mask).
+ * Radiologist (doctor), technician, or admin.
+ */
+router.post(
+    "/:id/overlay",
+    authenticateToken,
+    authorizeRoles("doctor", "technician", "admin"),
+    upload.single("file"),
+    uploadRequestOverlay
 );
 
 /*

@@ -386,7 +386,9 @@ exports.getRequestById = async (req, res) => {
 
                 u.full_name AS doctor_name,
 
-                df.file_path
+                df.file_path,
+
+                s.overlay_url
 
             FROM imaging_requests r
 
@@ -395,6 +397,9 @@ exports.getRequestById = async (req, res) => {
 
             JOIN users u
                 ON r.doctor_id = u.id
+
+            LEFT JOIN studies s
+                ON s.id = r.study_id
 
             LEFT JOIN dicom_files df
                 ON df.study_id = r.study_id
@@ -573,6 +578,95 @@ exports.uploadRequestImage = async (req, res) => {
         res.status(201).json({
             message: "Image uploaded successfully",
             study
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+            message: "Server error"
+        });
+
+    }
+};
+
+/*
+ * Upload an AVM (or other) segmentation overlay for a
+ * request's study. The mask is produced externally,
+ * registered to the CT, and stored as a NIfTI; the
+ * viewer paints it over the CT.
+ */
+exports.uploadRequestOverlay = async (req, res) => {
+
+    try {
+
+        if (!req.file) {
+            return res.status(400).json({
+                message: "No file uploaded"
+            });
+        }
+
+        const { id } = req.params;
+
+        const requestResult = await pool.query(
+            "SELECT study_id FROM imaging_requests WHERE id = $1",
+            [id]
+        );
+
+        if (requestResult.rows.length === 0) {
+            return res.status(404).json({
+                message: "Request not found"
+            });
+        }
+
+        const studyId = requestResult.rows[0].study_id;
+
+        if (!studyId) {
+            return res.status(400).json({
+                message:
+                    "Upload the CT image before adding an overlay"
+            });
+        }
+
+        // Keep the NIfTI extension (.nii / .nii.gz).
+        const fileExt =
+            /\.nii\.gz$/i.test(req.file.originalname)
+                ? ".nii.gz"
+                : path.extname(req.file.originalname);
+
+        const cloudinaryResult =
+            await new Promise((resolve, reject) => {
+
+                const stream =
+                    cloudinary.uploader.upload_stream(
+                        {
+                            resource_type: "raw",
+                            folder: "overlays",
+                            public_id:
+                                Date.now() + fileExt,
+                            use_filename: false
+                        },
+                        (error, result) =>
+                            error
+                                ? reject(error)
+                                : resolve(result)
+                    );
+
+                stream.end(req.file.buffer);
+
+            });
+
+        const overlayUrl = cloudinaryResult.secure_url;
+
+        await pool.query(
+            "UPDATE studies SET overlay_url = $1 WHERE id = $2",
+            [overlayUrl, studyId]
+        );
+
+        res.status(201).json({
+            message: "Overlay uploaded successfully",
+            overlay_url: overlayUrl
         });
 
     } catch (error) {

@@ -167,6 +167,7 @@ exports.getRequests = async (req, res) => {
                 r.request_number,
                 r.exam_type,
                 r.status,
+                r.priority,
                 r.created_at,
                 r.doctor_id,
 

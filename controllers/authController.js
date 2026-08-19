@@ -145,6 +145,13 @@ exports.login = async (req, res) => {
             });
         }
 
+        if (user.active === false) {
+            return res.status(403).json({
+                message:
+                    "Your account has been deactivated. Contact an administrator."
+            });
+        }
+
         const token = jwt.sign(
             {
                 id: user.id,
